@@ -1,0 +1,44 @@
+[
+  {
+    "id": "1758913617666-w4hu7ts0m",
+    "name": "Goals",
+    "events": [
+      {
+        "id": "1758913626930-l5omsogdc",
+        "timelineId": "1758913617666-w4hu7ts0m",
+        "type": "point",
+        "startTime": 859,
+        "color": "#ef4444",
+        "label": "Event at 14:19"
+      }
+    ],
+    "color": "#3b82f6",
+    "defaultEventType": "point"
+  },
+  {
+    "id": "1758913686512-05e3xo707",
+    "name": "Zone Time",
+    "events": [
+      {
+        "id": "1758913693602-yb7eymdu1",
+        "timelineId": "1758913686512-05e3xo707",
+        "type": "duration",
+        "startTime": 944,
+        "endTime": 1018,
+        "color": "#ef4444",
+        "label": "Event 15:44-16:58"
+      },
+      {
+        "id": "1758913700026-iiqwox4o5",
+        "timelineId": "1758913686512-05e3xo707",
+        "type": "duration",
+        "startTime": 1018.3,
+        "endTime": 1076.7,
+        "color": "#f59e0b",
+        "label": "Event 16:58-17:56"
+      }
+    ],
+    "color": "#ef4444",
+    "defaultEventType": "duration"
+  }
+]
