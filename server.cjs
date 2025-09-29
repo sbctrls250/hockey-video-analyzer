@@ -15,6 +15,93 @@ app.use(express.static('public'));
 // Serve local video files
 app.use('/videos', express.static('videos'));
 
+// Google Drive API endpoint to get direct download URLs
+app.get('/api/drive/url', async (req, res) => {
+  const driveUrl = req.query.url;
+  
+  if (!driveUrl) {
+    return res.status(400).json({ error: 'Google Drive URL is required' });
+  }
+  
+  try {
+    // Extract file ID from Google Drive URL
+    let fileId = null;
+    
+    // Handle different Google Drive URL formats
+    if (driveUrl.includes('drive.google.com/file/d/')) {
+      fileId = driveUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1];
+    } else if (driveUrl.includes('drive.google.com/open')) {
+      fileId = driveUrl.match(/id=([a-zA-Z0-9_-]+)/)?.[1];
+    }
+    
+    if (!fileId) {
+      return res.status(400).json({ 
+        error: 'Invalid Google Drive URL format. Please use a shareable link.' 
+      });
+    }
+    
+    // For now, return the direct download URL
+    // In production, you would use Google Drive API to get authenticated URLs
+    const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    
+    res.json({
+      success: true,
+      fileId: fileId,
+      directUrl: directUrl,
+      message: 'Use this URL in your video player. Note: File must be publicly accessible.'
+    });
+    
+  } catch (error) {
+    console.error('Google Drive URL processing error:', error);
+    res.status(500).json({ error: 'Failed to process Google Drive URL' });
+  }
+});
+
+// Enhanced video URL processing endpoint
+app.post('/api/videos/process-url', async (req, res) => {
+  const { url } = req.body;
+  
+  if (!url) {
+    return res.status(400).json({ error: 'Video URL is required' });
+  }
+  
+  try {
+    let processedUrl = url;
+    let source = 'direct';
+    
+    // Handle Google Drive URLs
+    if (url.includes('drive.google.com')) {
+      const fileId = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] || 
+                     url.match(/id=([a-zA-Z0-9_-]+)/)?.[1];
+      
+      if (fileId) {
+        processedUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+        source = 'google-drive';
+      }
+    }
+    
+    // Handle YouTube URLs (placeholder for future implementation)
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      return res.status(400).json({ 
+        error: 'YouTube integration coming soon. Please use Google Drive for now.',
+        supportedSources: ['google-drive', 'direct-url', 'local-file']
+      });
+    }
+    
+    res.json({
+      success: true,
+      originalUrl: url,
+      processedUrl: processedUrl,
+      source: source,
+      message: 'URL processed successfully'
+    });
+    
+  } catch (error) {
+    console.error('URL processing error:', error);
+    res.status(500).json({ error: 'Failed to process video URL' });
+  }
+});
+
 // Data storage (in production, use a proper database)
 const DATA_DIR = path.join(__dirname, 'data');
 const VIDEOS_FILE = path.join(DATA_DIR, 'videos.json');
