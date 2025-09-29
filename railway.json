@@ -1,0 +1,10 @@
+{
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "node server.cjs",
+    "buildCommand": "echo 'No build needed for backend'",
+    "healthcheckPath": "/api/health"
+  }
+}
