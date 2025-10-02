@@ -15,6 +15,94 @@ app.use(express.static('public'));
 // Serve local video files
 app.use('/videos', express.static('videos'));
 
+// Google Drive proxy endpoint - serves videos through our server
+app.get('/api/drive/proxy/:fileId', async (req, res) => {
+  const fileId = req.params.fileId;
+  
+  if (!fileId) {
+    return res.status(400).json({ error: 'File ID is required' });
+  }
+  
+  try {
+    // Try multiple Google Drive URL formats
+    const urls = [
+      `https://drive.google.com/uc?export=download&id=${fileId}`,
+      `https://drive.google.com/uc?export=view&id=${fileId}`,
+      `https://docs.google.com/uc?export=download&id=${fileId}`
+    ];
+    
+    let response = null;
+    let lastError = null;
+    
+    // Try each URL until one works
+    for (const url of urls) {
+      try {
+        console.log(`Trying Google Drive URL: ${url}`);
+        response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          }
+        });
+        
+        if (response.ok && response.headers.get('content-type')?.includes('video')) {
+          console.log(`Success with URL: ${url}`);
+          break;
+        } else if (response.ok) {
+          console.log(`URL worked but wrong content type: ${response.headers.get('content-type')}`);
+        }
+      } catch (error) {
+        console.log(`URL failed: ${url}`, error.message);
+        lastError = error;
+        continue;
+      }
+    }
+    
+    if (!response || !response.ok) {
+      throw new Error(`All Google Drive URLs failed. Last error: ${lastError?.message || 'Unknown error'}`);
+    }
+    
+    // Set appropriate headers for video streaming
+    const contentType = response.headers.get('content-type') || 'video/mp4';
+    res.set({
+      'Content-Type': contentType,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=3600',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Range',
+      'Access-Control-Expose-Headers': 'Content-Length, Content-Range'
+    });
+    
+    // Handle range requests for video seeking
+    const range = req.headers.range;
+    if (range) {
+      const contentLength = response.headers.get('content-length');
+      if (contentLength) {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : parseInt(contentLength) - 1;
+        const chunksize = (end - start) + 1;
+        
+        res.status(206);
+        res.set({
+          'Content-Range': `bytes ${start}-${end}/${contentLength}`,
+          'Content-Length': chunksize
+        });
+      }
+    }
+    
+    // Stream the video content
+    response.body.pipe(res);
+    
+  } catch (error) {
+    console.error('Google Drive proxy error:', error);
+    res.status(500).json({ 
+      error: 'Failed to proxy Google Drive video',
+      details: error.message,
+      fileId: fileId
+    });
+  }
+});
+
 // Google Drive API endpoint to get direct download URLs
 app.get('/api/drive/url', async (req, res) => {
   const driveUrl = req.query.url;
@@ -40,20 +128,55 @@ app.get('/api/drive/url', async (req, res) => {
       });
     }
     
-    // For now, return the direct download URL
-    // In production, you would use Google Drive API to get authenticated URLs
-    const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    // Return our proxy URL instead of direct Google Drive URL
+    const proxyUrl = `${req.protocol}://${req.get('host')}/api/drive/proxy/${fileId}`;
     
     res.json({
       success: true,
       fileId: fileId,
-      directUrl: directUrl,
-      message: 'Use this URL in your video player. Note: File must be publicly accessible.'
+      proxyUrl: proxyUrl,
+      message: 'Video will be served through our proxy to avoid CORS issues.'
     });
     
   } catch (error) {
     console.error('Google Drive URL processing error:', error);
     res.status(500).json({ error: 'Failed to process Google Drive URL' });
+  }
+});
+
+// New endpoint for Google Drive API integration
+app.get('/api/drive/stream/:fileId', async (req, res) => {
+  const fileId = req.params.fileId;
+  
+  if (!fileId) {
+    return res.status(400).json({ error: 'File ID is required' });
+  }
+  
+  try {
+    // Get the direct download URL from Google Drive
+    const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    
+    // Fetch the video from Google Drive
+    const response = await fetch(directUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch from Google Drive: ${response.status}`);
+    }
+    
+    // Set appropriate headers for video streaming
+    res.set({
+      'Content-Type': 'video/mp4',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=3600',
+      'Access-Control-Allow-Origin': '*'
+    });
+    
+    // Stream the video content
+    response.body.pipe(res);
+    
+  } catch (error) {
+    console.error('Google Drive stream error:', error);
+    res.status(500).json({ error: 'Failed to stream Google Drive video' });
   }
 });
 
